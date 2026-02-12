@@ -5,9 +5,19 @@ import plotly.graph_objects as go
 
 st.set_page_config(page_title="Dashboard Kuesioner", layout="wide")
 
-# ===============================
+# ==============================
+# STYLE GLOBAL
+# ==============================
+PRIMARY = "#2563eb"
+SUCCESS = "#16a34a"
+WARNING = "#f59e0b"
+DANGER = "#dc2626"
+
+px.defaults.template = "plotly_white"
+
+# ==============================
 # LOAD DATA
-# ===============================
+# ==============================
 @st.cache_data
 def load_data():
     return pd.read_excel("data_kuesioner.xlsx", engine="openpyxl")
@@ -15,201 +25,185 @@ def load_data():
 df = load_data()
 df_numeric = df.select_dtypes(include="number")
 
-# ===============================
-# SIDEBAR FILTER
-# ===============================
-st.sidebar.header("⚙️ Filter Data")
-
-selected_questions = st.sidebar.multiselect(
-    "Pilih Pertanyaan",
-    df_numeric.columns,
-    default=df_numeric.columns
-)
-
-df_filtered = df_numeric[selected_questions]
-
-# ===============================
-# HEADER
-# ===============================
 st.title("📊 Dashboard Analisis Kuesioner")
-st.markdown("Visualisasi interaktif untuk analisis data survei")
+st.markdown("Visualisasi Profesional & Modern")
 
-# ===============================
-# KPI CARDS
-# ===============================
+# ==============================
+# KPI SECTION
+# ==============================
 total_responden = len(df)
-rata_total = df_filtered.mean().mean()
-skor_tertinggi = df_filtered.max().max()
-skor_terendah = df_filtered.min().min()
+mean_total = df_numeric.mean().mean()
 
-col1, col2, col3, col4 = st.columns(4)
-
+col1, col2 = st.columns(2)
 col1.metric("Total Responden", total_responden)
-col2.metric("Rata-rata Skor", f"{rata_total:.2f}")
-col3.metric("Skor Tertinggi", skor_tertinggi)
-col4.metric("Skor Terendah", skor_terendah)
+col2.metric("Indeks Kepuasan", f"{mean_total:.2f} / 5")
 
 st.divider()
 
-# ===============================
-# TABS
-# ===============================
-tab1, tab2, tab3, tab4 = st.tabs([
-    "📊 Distribusi",
-    "📈 Analisis Pertanyaan",
-    "😊 Kategori Jawaban",
-    "🎁 Insight Tambahan"
-])
+# =====================================================
+# 1️⃣ DISTRIBUSI KESELURUHAN
+# =====================================================
+st.subheader("Distribusi Jawaban Keseluruhan")
 
-# ==================================================
-# TAB 1 — DISTRIBUSI
-# ==================================================
-with tab1:
+all_values = df_numeric.values.flatten()
+all_series = pd.Series(all_values)
 
-    all_values = df_filtered.values.flatten()
-    all_series = pd.Series(all_values)
+dist = all_series.value_counts().sort_index().reset_index()
+dist.columns = ["Skor", "Jumlah"]
 
-    distribusi = all_series.value_counts().sort_index().reset_index()
-    distribusi.columns = ["Skor", "Jumlah"]
+fig1 = go.Figure()
 
-    col1, col2 = st.columns(2)
+fig1.add_trace(go.Bar(
+    x=dist["Skor"],
+    y=dist["Jumlah"],
+    marker_color=PRIMARY,
+    text=dist["Jumlah"],
+    textposition="outside"
+))
 
-    with col1:
-        fig_bar = px.bar(
-            distribusi,
-            x="Skor",
-            y="Jumlah",
-            text="Jumlah",
-            color="Skor",
-            color_continuous_scale="Blues",
-            title="Distribusi Jawaban Keseluruhan"
-        )
-        st.plotly_chart(fig_bar, use_container_width=True)
-
-    with col2:
-        fig_pie = px.pie(
-            distribusi,
-            names="Skor",
-            values="Jumlah",
-            hole=0.4,
-            title="Proporsi Jawaban"
-        )
-        st.plotly_chart(fig_pie, use_container_width=True)
-
-# ==================================================
-# TAB 2 — ANALISIS PER PERTANYAAN
-# ==================================================
-with tab2:
-
-    df_melt = df_filtered.melt(var_name="Pertanyaan", value_name="Skor")
-    stacked = df_melt.groupby(["Pertanyaan", "Skor"]).size().reset_index(name="Jumlah")
-
-    fig_stack = px.bar(
-        stacked,
-        x="Pertanyaan",
-        y="Jumlah",
-        color="Skor",
-        barmode="stack",
-        title="Distribusi Jawaban per Pertanyaan"
-    )
-    st.plotly_chart(fig_stack, use_container_width=True)
-
-    # Rata-rata
-    mean_scores = df_filtered.mean().reset_index()
-    mean_scores.columns = ["Pertanyaan", "Rata-rata"]
-
-    fig_mean = px.bar(
-        mean_scores,
-        x="Pertanyaan",
-        y="Rata-rata",
-        text="Rata-rata",
-        color="Rata-rata",
-        color_continuous_scale="Viridis",
-        title="Rata-rata Skor per Pertanyaan"
-    )
-    st.plotly_chart(fig_mean, use_container_width=True)
-
-# ==================================================
-# TAB 3 — KATEGORI
-# ==================================================
-with tab3:
-
-    def kategori(skor):
-        if skor >= 4:
-            return "Positif"
-        elif skor == 3:
-            return "Netral"
-        else:
-            return "Negatif"
-
-    kategori_series = all_series.apply(kategori)
-    kategori_count = kategori_series.value_counts().reset_index()
-    kategori_count.columns = ["Kategori", "Jumlah"]
-
-    fig_kategori = px.bar(
-        kategori_count,
-        x="Kategori",
-        y="Jumlah",
-        text="Jumlah",
-        color="Kategori",
-        title="Distribusi Positif, Netral, Negatif"
-    )
-
-    st.plotly_chart(fig_kategori, use_container_width=True)
-
-    # Gauge Chart Kepuasan
-    fig_gauge = go.Figure(go.Indicator(
-        mode="gauge+number",
-        value=rata_total,
-        title={'text': "Indeks Kepuasan (Rata-rata Skor)"},
-        gauge={
-            'axis': {'range': [1, 5]},
-            'bar': {'color': "darkblue"},
-        }
-    ))
-
-    st.plotly_chart(fig_gauge, use_container_width=True)
-
-# ==================================================
-# TAB 4 — BONUS INSIGHT
-# ==================================================
-with tab4:
-
-    # Heatmap Korelasi
-    corr = df_filtered.corr()
-
-    fig_heatmap = px.imshow(
-        corr,
-        text_auto=True,
-        aspect="auto",
-        title="Heatmap Korelasi Antar Pertanyaan"
-    )
-    st.plotly_chart(fig_heatmap, use_container_width=True)
-
-    # Radar Chart
-    radar = df_filtered.mean()
-
-    fig_radar = go.Figure()
-
-    fig_radar.add_trace(go.Scatterpolar(
-        r=radar.values,
-        theta=radar.index,
-        fill='toself'
-    ))
-
-    fig_radar.update_layout(
-        polar=dict(radialaxis=dict(visible=True, range=[1, 5])),
-        title="Radar Chart Rata-rata Skor"
-    )
-
-    st.plotly_chart(fig_radar, use_container_width=True)
-
-# ===============================
-# DOWNLOAD DATA
-# ===============================
-st.sidebar.download_button(
-    label="📥 Download Data (CSV)",
-    data=df.to_csv(index=False),
-    file_name="data_kuesioner.csv",
-    mime="text/csv"
+fig1.update_layout(
+    height=400,
+    xaxis_title="Skor",
+    yaxis_title="Jumlah Respon",
+    showlegend=False
 )
+
+st.plotly_chart(fig1, use_container_width=True)
+
+# =====================================================
+# 2️⃣ PIE DONUT MODERN
+# =====================================================
+st.subheader("Proporsi Jawaban")
+
+fig2 = go.Figure(go.Pie(
+    labels=dist["Skor"],
+    values=dist["Jumlah"],
+    hole=0.6,
+    marker_colors=["#1d4ed8", "#3b82f6", "#60a5fa", "#93c5fd", "#bfdbfe"]
+))
+
+fig2.update_layout(height=400)
+st.plotly_chart(fig2, use_container_width=True)
+
+# =====================================================
+# 3️⃣ STACKED BAR ELEGAN
+# =====================================================
+st.subheader("Distribusi per Pertanyaan")
+
+df_melt = df_numeric.melt(var_name="Pertanyaan", value_name="Skor")
+stacked = df_melt.groupby(["Pertanyaan", "Skor"]).size().reset_index(name="Jumlah")
+
+fig3 = px.bar(
+    stacked,
+    x="Pertanyaan",
+    y="Jumlah",
+    color="Skor",
+    barmode="stack",
+    color_continuous_scale="Blues"
+)
+
+fig3.update_layout(height=500)
+st.plotly_chart(fig3, use_container_width=True)
+
+# =====================================================
+# 4️⃣ RATA-RATA PER PERTANYAAN (CLEAN STYLE)
+# =====================================================
+st.subheader("Rata-rata Skor per Pertanyaan")
+
+mean_scores = df_numeric.mean().reset_index()
+mean_scores.columns = ["Pertanyaan", "Rata-rata"]
+
+fig4 = go.Figure()
+
+fig4.add_trace(go.Bar(
+    x=mean_scores["Pertanyaan"],
+    y=mean_scores["Rata-rata"],
+    marker_color=PRIMARY,
+    text=mean_scores["Rata-rata"].round(2),
+    textposition="outside"
+))
+
+fig4.update_layout(
+    yaxis=dict(range=[0,5]),
+    height=450,
+    showlegend=False
+)
+
+st.plotly_chart(fig4, use_container_width=True)
+
+# =====================================================
+# 5️⃣ POSITIF NETRAL NEGATIF (WARNA PSIKOLOGIS)
+# =====================================================
+st.subheader("Distribusi Sentimen Jawaban")
+
+def kategori(x):
+    if x >= 4:
+        return "Positif"
+    elif x == 3:
+        return "Netral"
+    else:
+        return "Negatif"
+
+kategori_series = all_series.apply(kategori)
+kategori_count = kategori_series.value_counts().reset_index()
+kategori_count.columns = ["Kategori", "Jumlah"]
+
+color_map = {
+    "Positif": SUCCESS,
+    "Netral": WARNING,
+    "Negatif": DANGER
+}
+
+fig5 = go.Figure()
+
+fig5.add_trace(go.Bar(
+    x=kategori_count["Kategori"],
+    y=kategori_count["Jumlah"],
+    marker_color=[color_map[k] for k in kategori_count["Kategori"]],
+    text=kategori_count["Jumlah"],
+    textposition="outside"
+))
+
+fig5.update_layout(height=400, showlegend=False)
+
+st.plotly_chart(fig5, use_container_width=True)
+
+# =====================================================
+# 6️⃣ GAUGE PREMIUM
+# =====================================================
+st.subheader("Indeks Kepuasan")
+
+fig6 = go.Figure(go.Indicator(
+    mode="gauge+number",
+    value=mean_total,
+    number={'suffix': " / 5"},
+    gauge={
+        'axis': {'range': [1,5]},
+        'bar': {'color': PRIMARY},
+        'steps': [
+            {'range': [1,2], 'color': "#fee2e2"},
+            {'range': [2,3], 'color': "#fef3c7"},
+            {'range': [3,4], 'color': "#dbeafe"},
+            {'range': [4,5], 'color': "#dcfce7"},
+        ]
+    }
+))
+
+fig6.update_layout(height=350)
+st.plotly_chart(fig6, use_container_width=True)
+
+# =====================================================
+# 7️⃣ HEATMAP MODERN
+# =====================================================
+st.subheader("Korelasi Antar Pertanyaan")
+
+corr = df_numeric.corr()
+
+fig7 = px.imshow(
+    corr,
+    text_auto=True,
+    color_continuous_scale="Blues"
+)
+
+fig7.update_layout(height=500)
+st.plotly_chart(fig7, use_container_width=True)
